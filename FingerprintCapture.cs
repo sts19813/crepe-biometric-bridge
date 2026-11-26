@@ -11,12 +11,12 @@ internal static class FingerprintCapture
     private const uint VerifyPurpose = 2;
     private const uint RawSample = 0x20;
 
-    public static Task<FingerprintTemplate> CaptureAsync()
+    public static Task<FingerprintTemplate> CaptureAsync(CancellationToken cancellationToken)
     {
-        return Task.Run(Capture);
+        return Task.Run(() => Capture(cancellationToken), cancellationToken);
     }
 
-    private static FingerprintTemplate Capture()
+    private static FingerprintTemplate Capture(CancellationToken cancellationToken)
     {
         var session = UIntPtr.Zero;
         var sample = IntPtr.Zero;
@@ -30,7 +30,10 @@ internal static class FingerprintCapture
                 throw new InvalidOperationException($"No se pudo abrir el lector. Ejecuta el checador como administrador. Código: {openResult}.");
             }
 
+            using var cancellationRegistration = cancellationToken.Register(() => WinBioCancel(session));
             var captureResult = WinBioCaptureSample(session, VerifyPurpose, RawSample, out _, out sample, out var sampleSize, out var rejectDetail);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (captureResult != 0)
             {
@@ -61,6 +64,9 @@ internal static class FingerprintCapture
 
     [DllImport("winbio.dll")]
     private static extern int WinBioCaptureSample(UIntPtr sessionHandle, uint purpose, uint flags, out uint unitId, out IntPtr sample, out UIntPtr sampleSize, out uint rejectDetail);
+
+    [DllImport("winbio.dll")]
+    private static extern int WinBioCancel(UIntPtr sessionHandle);
 
     [DllImport("winbio.dll")]
     private static extern int WinBioFree(IntPtr address);

@@ -4,104 +4,291 @@ namespace CrepeBiometricBridge;
 
 internal sealed class BridgeForm : Form
 {
-    private readonly TextBox employeeId = new() { Width = 230 };
-    private readonly Button enroll = new() { AutoSize = true, Text = "Registrar huella" };
-    private readonly Button check = new() { AutoSize = true, Text = "Checar entrada / salida" };
-    private readonly Button settings = new() { AutoSize = true, Text = "Configuración" };
-    private readonly Label status = new() { AutoSize = false, Dock = DockStyle.Bottom, Height = 72, Padding = new Padding(16), TextAlign = ContentAlignment.MiddleCenter };
+    private static readonly Color Navy = Color.FromArgb(16, 33, 62);
+    private static readonly Color Indigo = Color.FromArgb(66, 75, 190);
+    private static readonly Color Background = Color.FromArgb(244, 247, 252);
+    private static readonly Color Success = Color.FromArgb(18, 145, 102);
+    private static readonly Color Danger = Color.FromArgb(202, 68, 80);
+    private readonly ComboBox employeeSearch = new() { DropDownStyle = ComboBoxStyle.DropDown, Font = new Font("Segoe UI", 13), Height = 44, IntegralHeight = false, Width = 440 };
+    private readonly Label selectedEmployee = new() { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), MaximumSize = new Size(440, 0), Text = "Busca y selecciona al colaborador para registrar su huella." };
+    private readonly Button enroll = CreateButton("Registrar huella", Indigo);
+    private readonly Button settings = CreateButton("Configuración", Color.FromArgb(225, 231, 241), Navy);
+    private readonly Label statusTitle = new() { AutoSize = true, Font = new Font("Segoe UI Semibold", 16), ForeColor = Navy, Text = "Lector activo" };
+    private readonly Label statusDetail = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12), ForeColor = Color.FromArgb(83, 95, 114), TextAlign = ContentAlignment.TopCenter };
+    private readonly Label fingerprintIcon = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 23), ForeColor = Indigo, Text = "HUELLA", TextAlign = ContentAlignment.MiddleCenter };
     private readonly TemplateVault vault = new();
+    private CancellationTokenSource? kioskCancellation;
+    private CancellationTokenSource? searchCancellation;
+    private Task? kioskTask;
+    private bool isUpdatingEmployees;
 
     public BridgeForm()
     {
         Text = "Crepe · Checador biométrico";
+        BackColor = Background;
+        ClientSize = new Size(1000, 650);
+        MinimumSize = new Size(850, 590);
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(580, 310);
-        Font = new Font(Font.FontFamily, 12);
+        Font = new Font("Segoe UI", 11);
 
-        var panel = new FlowLayoutPanel
+        var root = new TableLayoutPanel
         {
-            AutoScroll = true,
+            BackColor = Background,
+            ColumnCount = 1,
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            Padding = new Padding(32),
-            WrapContents = false,
+            Padding = new Padding(24),
+            RowCount = 2,
         };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
 
-        panel.Controls.Add(new Label { AutoSize = true, Text = "ID del empleado en Crepe" });
-        panel.Controls.Add(employeeId);
-        panel.Controls.Add(new Label { AutoSize = true, Height = 12 });
-        panel.Controls.Add(enroll);
-        panel.Controls.Add(check);
-        panel.Controls.Add(settings);
-        panel.Controls.Add(new Label
+        var content = new TableLayoutPanel { ColumnCount = 2, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 20) };
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+        content.Controls.Add(CreateEnrollmentCard(), 0, 0);
+        content.Controls.Add(CreateReaderCard(), 1, 0);
+        root.Controls.Add(content, 0, 0);
+        root.Controls.Add(CreateStatusCard(), 0, 1);
+        Controls.Add(root);
+
+        employeeSearch.TextChanged += async (_, _) => await QueueEmployeeSearchAsync();
+        employeeSearch.SelectedIndexChanged += (_, _) => UpdateSelectedEmployee();
+        enroll.Click += async (_, _) => await EnrollAsync();
+        settings.Click += (_, _) => EditSettings();
+        Shown += async (_, _) =>
+        {
+            await QueueEmployeeSearchAsync();
+            StartKiosk();
+        };
+        FormClosing += (_, _) => StopKiosk();
+    }
+
+    private Control CreateEnrollmentCard()
+    {
+        var card = CreateCard();
+        card.Margin = new Padding(0, 0, 12, 0);
+        var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(38), RowCount = 8 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+
+        layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Registrar colaborador" }, 0, 0);
+        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), Text = "Escribe el nombre y selecciona a la persona de Crepe." }, 0, 1);
+        layout.Controls.Add(employeeSearch, 0, 2);
+        layout.Controls.Add(selectedEmployee, 0, 3);
+        layout.Controls.Add(enroll, 0, 4);
+        layout.Controls.Add(settings, 0, 5);
+        layout.Controls.Add(new Label
         {
             AutoSize = true,
-            MaximumSize = new Size(470, 0),
-            Padding = new Padding(0, 16, 0, 0),
-            Text = "La aplicación guarda una plantilla cifrada para comparar localmente; no guarda imágenes de huellas.",
-        });
+            ForeColor = Color.FromArgb(106, 117, 136),
+            MaximumSize = new Size(440, 0),
+            Text = "El registro toma tres lecturas del mismo dedo. Retíralo entre cada lectura para mejorar el reconocimiento.",
+        }, 0, 7);
 
-        Controls.Add(panel);
-        Controls.Add(status);
+        card.Controls.Add(layout);
+        return card;
+    }
 
-        enroll.Click += async (_, _) => await EnrollAsync();
-        check.Click += async (_, _) => await CheckAsync();
-        settings.Click += (_, _) => EditSettings();
-        SetStatus("Configura Crepe y ejecuta este checador como administrador.");
+    private Control CreateReaderCard()
+    {
+        var card = CreateCard();
+        card.Margin = new Padding(12, 0, 0, 0);
+        var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(38), RowCount = 5 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+
+        layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Punto de checada" }, 0, 0);
+        var iconCircle = new Panel { BackColor = Color.FromArgb(234, 237, 255), Dock = DockStyle.Fill, Margin = new Padding(26, 26, 26, 20) };
+        iconCircle.Controls.Add(fingerprintIcon);
+        layout.Controls.Add(iconCircle, 0, 1);
+        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Success, Font = new Font("Segoe UI Semibold", 12), Text = "●  Modo automático activado", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill }, 0, 2);
+        layout.Controls.Add(statusTitle, 0, 3);
+        layout.Controls.Add(statusDetail, 0, 4);
+        card.Controls.Add(layout);
+        return card;
+    }
+
+    private Control CreateStatusCard()
+    {
+        var panel = new Panel { BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill, Padding = new Padding(22, 14, 22, 14) };
+        var title = new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 13), ForeColor = Navy, Text = "CREPE  /  CHECADOR BIOMÉTRICO", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft };
+        var note = new Label { AutoSize = true, Font = new Font("Segoe UI", 10), ForeColor = Color.FromArgb(106, 117, 136), Text = "Las plantillas se cifran en esta computadora. No se almacenan imágenes.", Dock = DockStyle.Right, TextAlign = ContentAlignment.MiddleRight };
+        panel.Controls.Add(note);
+        panel.Controls.Add(title);
+        return panel;
+    }
+
+    private async Task QueueEmployeeSearchAsync()
+    {
+        if (isUpdatingEmployees)
+        {
+            return;
+        }
+
+        searchCancellation?.Cancel();
+        searchCancellation?.Dispose();
+        searchCancellation = new CancellationTokenSource();
+        var cancellationToken = searchCancellation.Token;
+
+        try
+        {
+            await Task.Delay(250, cancellationToken);
+            var employees = await new CrepeClient(BridgeSettingsStore.Read()).FindEmployeesAsync(employeeSearch.Text, cancellationToken);
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            var currentText = employeeSearch.Text;
+            isUpdatingEmployees = true;
+            employeeSearch.BeginUpdate();
+            employeeSearch.Items.Clear();
+            employeeSearch.Items.AddRange(employees.Cast<object>().ToArray());
+            employeeSearch.Text = currentText;
+            employeeSearch.SelectionStart = currentText.Length;
+            employeeSearch.EndUpdate();
+            employeeSearch.DroppedDown = employeeSearch.Focused && employees.Count > 0;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            SetStatus("No se pudo consultar al equipo.", exception.Message, Danger);
+        }
+        finally
+        {
+            isUpdatingEmployees = false;
+        }
+    }
+
+    private void UpdateSelectedEmployee()
+    {
+        if (employeeSearch.SelectedItem is EmployeeOption employee)
+        {
+            selectedEmployee.Text = $"Seleccionado: {employee.Name}{(string.IsNullOrWhiteSpace(employee.Position) ? string.Empty : $" · {employee.Position}")}";
+        }
     }
 
     private async Task EnrollAsync()
     {
-        if (!int.TryParse(employeeId.Text, out var parsedEmployeeId) || parsedEmployeeId < 1)
+        if (employeeSearch.SelectedItem is not EmployeeOption employee)
         {
-            SetStatus("Escribe un ID de empleado válido.", Color.DarkRed);
+            SetStatus("Selecciona un nombre de la lista antes de registrar.", "Busca al colaborador y tócala en la lista.", Danger);
             return;
         }
 
-        await RunAsync(async () =>
-        {
-            SetStatus("Coloca el dedo en el lector.");
-            var template = await FingerprintCapture.CaptureAsync();
-            var templateId = Guid.NewGuid();
+        await StopKioskAsync();
+        SetButtonsEnabled(false);
 
-            vault.Save(templateId, parsedEmployeeId, template);
+        try
+        {
+            var templates = new List<FingerprintTemplate>();
+
+            for (var sample = 1; sample <= 3; sample++)
+            {
+                SetStatus($"Registro {sample} de 3", "Coloca el mismo dedo sobre el lector.", Indigo);
+                templates.Add(await FingerprintCapture.CaptureAsync(CancellationToken.None));
+
+                if (sample < 3)
+                {
+                    SetStatus($"Registro {sample} guardado", "Retira el dedo y vuelve a colocarlo para la siguiente lectura.", Indigo);
+                    await Task.Delay(TimeSpan.FromSeconds(1));
+                }
+            }
+
+            var templateId = Guid.NewGuid();
+            vault.Save(templateId, employee.Id, templates);
 
             try
             {
-                var message = await new CrepeClient(BridgeSettingsStore.Read()).EnrollAsync(parsedEmployeeId, templateId);
-                SetStatus(message, Color.DarkGreen);
+                var message = await new CrepeClient(BridgeSettingsStore.Read()).EnrollAsync(employee.Id, templateId);
+                SetStatus("Registro terminado", message, Success);
             }
             catch
             {
                 vault.Delete(templateId);
                 throw;
             }
-        });
+        }
+        catch (Exception exception)
+        {
+            SetStatus("No se pudo registrar la huella", exception.Message, Danger);
+        }
+        finally
+        {
+            SetButtonsEnabled(true);
+            StartKiosk();
+        }
     }
 
-    private async Task CheckAsync()
+    private void StartKiosk()
     {
-        await RunAsync(async () =>
+        if (kioskTask is { IsCompleted: false })
         {
-            SetStatus("Coloca el dedo en el lector.");
-            var probe = await FingerprintCapture.CaptureAsync();
-            var match = vault.Find(probe);
+            return;
+        }
 
-            if (match is null)
+        kioskCancellation = new CancellationTokenSource();
+        kioskTask = RunKioskAsync(kioskCancellation.Token);
+    }
+
+    private void StopKiosk()
+    {
+        kioskCancellation?.Cancel();
+    }
+
+    private async Task StopKioskAsync()
+    {
+        StopKiosk();
+
+        if (kioskTask is not null)
+        {
+            await Task.WhenAny(kioskTask, Task.Delay(TimeSpan.FromSeconds(2)));
+        }
+    }
+
+    private async Task RunKioskAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
             {
-                SetStatus("No hay huellas registradas en esta computadora.", Color.DarkRed);
+                SetStatus("Lector activo", "Coloca un dedo para registrar entrada o salida.", Indigo);
+                var probe = await FingerprintCapture.CaptureAsync(cancellationToken);
+                var match = vault.Find(probe);
+
+                if (match is null || !match.IsRecognized)
+                {
+                    SetStatus("Huella no reconocida", "Pide a recepción que registre la huella del colaborador.", Danger);
+                    await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                    continue;
+                }
+
+                var message = await new CrepeClient(BridgeSettingsStore.Read()).RegisterAsync(match.Template.TemplateId);
+                SetStatus("Registro guardado", message, Success);
+                await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
                 return;
             }
-
-            if (!match.IsRecognized)
+            catch (Exception exception)
             {
-                SetStatus($"Huella no reconocida. Puntaje: {match.Score:F1}.", Color.DarkRed);
-                return;
+                SetStatus("No se pudo leer la huella", exception.Message, Danger);
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
             }
-
-            var message = await new CrepeClient(BridgeSettingsStore.Read()).RegisterAsync(match.Template.TemplateId);
-            SetStatus(message, Color.DarkGreen);
-        });
+        }
     }
 
     private void EditSettings()
@@ -111,39 +298,45 @@ internal sealed class BridgeForm : Form
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             BridgeSettingsStore.Write(dialog.Settings);
-            SetStatus("Configuración guardada en esta computadora.", Color.DarkGreen);
-        }
-    }
-
-    private async Task RunAsync(Func<Task> action)
-    {
-        SetButtonsEnabled(false);
-
-        try
-        {
-            await action();
-        }
-        catch (Exception exception)
-        {
-            SetStatus(exception.Message, Color.DarkRed);
-        }
-        finally
-        {
-            SetButtonsEnabled(true);
+            SetStatus("Configuración guardada", "El lector seguirá usando esta computadora y esta instancia de Crepe.", Success);
         }
     }
 
     private void SetButtonsEnabled(bool enabled)
     {
         enroll.Enabled = enabled;
-        check.Enabled = enabled;
         settings.Enabled = enabled;
+        employeeSearch.Enabled = enabled;
     }
 
-    private void SetStatus(string message, Color? color = null)
+    private void SetStatus(string title, string detail, Color color)
     {
-        status.Text = message;
-        status.ForeColor = color ?? Color.Black;
+        statusTitle.Text = title;
+        statusTitle.ForeColor = color;
+        statusDetail.Text = detail;
+        fingerprintIcon.ForeColor = color;
+    }
+
+    private static Button CreateButton(string text, Color backColor, Color? foreColor = null)
+    {
+        return new Button
+        {
+            AutoSize = false,
+            BackColor = backColor,
+            Cursor = Cursors.Hand,
+            FlatAppearance = { BorderSize = 0 },
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI Semibold", 12),
+            ForeColor = foreColor ?? Color.White,
+            Height = 48,
+            Text = text,
+            Width = 250,
+        };
+    }
+
+    private static Panel CreateCard()
+    {
+        return new Panel { BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill };
     }
 }
 

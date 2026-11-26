@@ -7,6 +7,13 @@ internal sealed class CrepeClient(BridgeSettings settings)
 {
     private readonly HttpClient client = CreateClient(settings);
 
+    public async Task<IReadOnlyList<EmployeeOption>> FindEmployeesAsync(string search, CancellationToken cancellationToken)
+    {
+        var response = await client.GetFromJsonAsync<EmployeesResponse>($"checks/biometrico/bridge/employees?search={Uri.EscapeDataString(search)}", cancellationToken);
+
+        return response?.Employees ?? [];
+    }
+
     public async Task<string> EnrollAsync(int employeeId, Guid templateId)
     {
         using var response = await client.PostAsJsonAsync("checks/biometrico/bridge/enroll", new
@@ -60,4 +67,14 @@ internal sealed class CrepeClient(BridgeSettings settings)
     }
 
     private sealed record BridgeResponse(string? Message);
+
+    private sealed record EmployeesResponse(IReadOnlyList<EmployeeOption>? Employees);
+}
+
+internal sealed record EmployeeOption(int Id, string Name, string? Position)
+{
+    public override string ToString()
+    {
+        return string.IsNullOrWhiteSpace(Position) ? Name : $"{Name} · {Position}";
+    }
 }
