@@ -6,8 +6,8 @@ internal static class Ansi381Image
 {
     private const int StandardDataSizeOffset = 8;
     private const int StandardDataOffsetOffset = 12;
-    private const int HeaderSize = 38;
-    private const int BlockHeaderSize = 14;
+    private const int HeaderSize = 40;
+    private const int BlockHeaderSize = 16;
 
     public static FingerprintImage Read(byte[] bir)
     {
