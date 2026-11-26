@@ -36,6 +36,7 @@ internal sealed class CrepeClient(BridgeSettings settings)
         }
 
         var client = new HttpClient { BaseAddress = address, Timeout = TimeSpan.FromSeconds(15) };
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         if (!string.IsNullOrWhiteSpace(settings.BridgeKey))
         {
