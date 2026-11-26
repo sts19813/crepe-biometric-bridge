@@ -254,8 +254,12 @@ internal sealed class BridgeForm : Form
 
         if (kioskTask is not null)
         {
-            await Task.WhenAny(kioskTask, Task.Delay(TimeSpan.FromSeconds(2)));
+            await kioskTask;
         }
+
+        kioskCancellation?.Dispose();
+        kioskCancellation = null;
+        kioskTask = null;
     }
 
     private async Task RunKioskAsync(CancellationToken cancellationToken)
@@ -282,6 +286,11 @@ internal sealed class BridgeForm : Form
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 return;
+            }
+            catch (CrepeBridgeException exception) when (exception.StatusCode == 422)
+            {
+                SetStatus("Checada completada", exception.Message, Color.FromArgb(190, 126, 24));
+                await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
             }
             catch (Exception exception)
             {

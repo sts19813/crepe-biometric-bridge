@@ -62,13 +62,18 @@ internal sealed class CrepeClient(BridgeSettings settings)
             return payload?.Message ?? successMessage;
         }
 
-        var detail = await response.Content.ReadAsStringAsync();
-        throw new InvalidOperationException($"Crepe rechazó el registro ({(int)response.StatusCode}). {detail}");
+        var errorPayload = await response.Content.ReadFromJsonAsync<BridgeResponse>();
+        throw new CrepeBridgeException(errorPayload?.Message ?? "Crepe rechazó el registro.", (int)response.StatusCode);
     }
 
     private sealed record BridgeResponse(string? Message);
 
     private sealed record EmployeesResponse(IReadOnlyList<EmployeeOption>? Employees);
+}
+
+internal sealed class CrepeBridgeException(string message, int statusCode) : InvalidOperationException(message)
+{
+    public int StatusCode { get; } = statusCode;
 }
 
 internal sealed record EmployeeOption(int Id, string Name, string? Position)
