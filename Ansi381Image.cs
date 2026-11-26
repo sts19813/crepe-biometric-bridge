@@ -1,6 +1,10 @@
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using SourceAFIS;
 
 namespace CrepeBiometricBridge;
+
+internal sealed record CapturedFingerprint(FingerprintTemplate Template, Bitmap Preview);
 
 internal static class Ansi381Image
 {
@@ -9,7 +13,7 @@ internal static class Ansi381Image
     private const int HeaderSize = 40;
     private const int BlockHeaderSize = 16;
 
-    public static FingerprintImage Read(byte[] bir)
+    public static CapturedFingerprint Read(byte[] bir)
     {
         if (bir.Length < 16)
         {
@@ -52,6 +56,41 @@ internal static class Ansi381Image
             dpi = 500;
         }
 
-        return new FingerprintImage(width, height, bir[pixelsOffset..(pixelsOffset + pixelCount)], new FingerprintImageOptions { Dpi = dpi });
+        var pixels = bir[pixelsOffset..(pixelsOffset + pixelCount)];
+        var template = new FingerprintTemplate(new FingerprintImage(width, height, pixels, new FingerprintImageOptions { Dpi = dpi }));
+
+        return new CapturedFingerprint(template, CreatePreview(width, height, pixels));
+    }
+
+    private static Bitmap CreatePreview(int width, int height, byte[] pixels)
+    {
+        var preview = new Bitmap(width, height, PixelFormat.Format24bppRgb);
+        var data = preview.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
+
+        try
+        {
+            var stride = Math.Abs(data.Stride);
+            var rgb = new byte[checked(stride * height)];
+
+            for (var y = 0; y < height; y++)
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var value = pixels[(y * width) + x];
+                    var offset = (y * stride) + (x * 3);
+                    rgb[offset] = value;
+                    rgb[offset + 1] = value;
+                    rgb[offset + 2] = value;
+                }
+            }
+
+            Marshal.Copy(rgb, 0, data.Scan0, rgb.Length);
+        }
+        finally
+        {
+            preview.UnlockBits(data);
+        }
+
+        return preview;
     }
 }

@@ -25,14 +25,26 @@ internal sealed class CrepeClient(BridgeSettings settings)
         return await MessageAsync(response, "La huella fue ligada al empleado en Crepe.");
     }
 
-    public async Task<string> RegisterAsync(Guid templateId)
+    public async Task<CheckRecord> RegisterAsync(Guid templateId)
     {
         using var response = await client.PostAsJsonAsync("checks/biometrico/bridge/registrar", new
         {
             template_id = templateId,
         });
 
-        return await MessageAsync(response, "Registro guardado.");
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorPayload = await response.Content.ReadFromJsonAsync<BridgeResponse>();
+            throw new CrepeBridgeException(errorPayload?.Message ?? "Crepe rechazó el registro.", (int)response.StatusCode);
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<CheckResponse>();
+
+        return new CheckRecord(
+            payload?.EmployeeName ?? "Colaborador",
+            payload?.CheckedAt ?? DateTime.Now.ToString("HH:mm"),
+            payload?.Status ?? "registered",
+            payload?.Message ?? "Registro guardado.");
     }
 
     private static HttpClient CreateClient(BridgeSettings settings)
@@ -68,6 +80,8 @@ internal sealed class CrepeClient(BridgeSettings settings)
 
     private sealed record BridgeResponse(string? Message);
 
+    private sealed record CheckResponse(string? Message, string? Status, string? EmployeeName, string? CheckedAt);
+
     private sealed record EmployeesResponse(IReadOnlyList<EmployeeOption>? Employees);
 }
 
@@ -75,6 +89,8 @@ internal sealed class CrepeBridgeException(string message, int statusCode) : Inv
 {
     public int StatusCode { get; } = statusCode;
 }
+
+internal sealed record CheckRecord(string EmployeeName, string CheckedAt, string Status, string Message);
 
 internal sealed record EmployeeOption(int Id, string Name, string? Position)
 {

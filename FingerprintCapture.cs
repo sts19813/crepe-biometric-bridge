@@ -12,7 +12,7 @@ internal static class FingerprintCapture
     private const uint VerifyPurpose = 2;
     private const uint RawSample = 0x20;
 
-    public static async Task<FingerprintTemplate> CaptureAsync(CancellationToken cancellationToken)
+    public static async Task<CapturedFingerprint> CaptureAsync(CancellationToken cancellationToken)
     {
         await CaptureGate.WaitAsync(cancellationToken);
 
@@ -26,7 +26,7 @@ internal static class FingerprintCapture
         }
     }
 
-    private static FingerprintTemplate Capture(CancellationToken cancellationToken)
+    private static CapturedFingerprint Capture(CancellationToken cancellationToken)
     {
         var session = UIntPtr.Zero;
         var sample = IntPtr.Zero;
@@ -53,7 +53,7 @@ internal static class FingerprintCapture
             var bir = new byte[checked((int)sampleSize.ToUInt64())];
             Marshal.Copy(sample, bir, 0, bir.Length);
 
-            return new FingerprintTemplate(Ansi381Image.Read(bir));
+            return Ansi381Image.Read(bir);
         }
         finally
         {

@@ -17,6 +17,7 @@ internal sealed class BridgeForm : Form
     private readonly Label statusTitle = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 16), ForeColor = Navy, Text = "Lector activo", TextAlign = ContentAlignment.MiddleCenter };
     private readonly Label statusDetail = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12), ForeColor = Color.FromArgb(83, 95, 114), TextAlign = ContentAlignment.TopCenter };
     private readonly Label fingerprintIcon = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 23), ForeColor = Indigo, Text = "HUELLA", TextAlign = ContentAlignment.MiddleCenter };
+    private readonly PictureBox fingerprintPreview = new() { BackColor = Color.FromArgb(234, 237, 255), Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
     private readonly TemplateVault vault = new();
     private CancellationTokenSource? kioskCancellation;
     private CancellationTokenSource? searchCancellation;
@@ -35,14 +36,7 @@ internal sealed class BridgeForm : Form
         Font = new Font("Segoe UI", 11);
         cancelEnrollment.Visible = false;
 
-        var root = new TableLayoutPanel
-        {
-            BackColor = Background,
-            ColumnCount = 1,
-            Dock = DockStyle.Fill,
-            Padding = new Padding(24),
-            RowCount = 2,
-        };
+        var root = new TableLayoutPanel { BackColor = Background, ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(24), RowCount = 2 };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
 
@@ -65,7 +59,11 @@ internal sealed class BridgeForm : Form
             await QueueEmployeeSearchAsync();
             StartKiosk();
         };
-        FormClosing += (_, _) => StopKiosk();
+        FormClosing += (_, _) =>
+        {
+            StopKiosk();
+            fingerprintPreview.Image?.Dispose();
+        };
     }
 
     private Control CreateEnrollmentCard()
@@ -81,7 +79,6 @@ internal sealed class BridgeForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-
         layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Registrar colaborador" }, 0, 0);
         layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), Text = "Escribe el nombre y selecciona a la persona de Crepe." }, 0, 1);
         layout.Controls.Add(employeeSearch, 0, 2);
@@ -89,14 +86,7 @@ internal sealed class BridgeForm : Form
         layout.Controls.Add(enroll, 0, 4);
         layout.Controls.Add(settings, 0, 5);
         layout.Controls.Add(cancelEnrollment, 0, 6);
-        layout.Controls.Add(new Label
-        {
-            AutoSize = true,
-            ForeColor = Color.FromArgb(106, 117, 136),
-            MaximumSize = new Size(440, 0),
-            Text = "El registro toma tres lecturas del mismo dedo. Retíralo entre cada lectura para mejorar el reconocimiento.",
-        }, 0, 7);
-
+        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(106, 117, 136), MaximumSize = new Size(440, 0), Text = "El registro toma una lectura. Coloca un dedo firme y centrado sobre el lector." }, 0, 7);
         card.Controls.Add(layout);
         return card;
     }
@@ -111,11 +101,11 @@ internal sealed class BridgeForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
-
         layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Punto de checada" }, 0, 0);
-        var iconCircle = new Panel { BackColor = Color.FromArgb(234, 237, 255), Dock = DockStyle.Fill, Margin = new Padding(26, 26, 26, 20) };
-        iconCircle.Controls.Add(fingerprintIcon);
-        layout.Controls.Add(iconCircle, 0, 1);
+        var previewPanel = new Panel { BackColor = Color.FromArgb(234, 237, 255), Dock = DockStyle.Fill, Margin = new Padding(26, 26, 26, 20) };
+        previewPanel.Controls.Add(fingerprintIcon);
+        previewPanel.Controls.Add(fingerprintPreview);
+        layout.Controls.Add(previewPanel, 0, 1);
         layout.Controls.Add(new Label { AutoSize = true, ForeColor = Success, Font = new Font("Segoe UI Semibold", 12), Text = "●  AUTOMÁTICO", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill }, 0, 2);
         layout.Controls.Add(statusTitle, 0, 3);
         layout.Controls.Add(statusDetail, 0, 4);
@@ -126,10 +116,8 @@ internal sealed class BridgeForm : Form
     private Control CreateStatusCard()
     {
         var panel = new Panel { BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill, Padding = new Padding(22, 14, 22, 14) };
-        var title = new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 13), ForeColor = Navy, Text = "CREPE  /  CHECADOR BIOMÉTRICO", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft };
-        var note = new Label { AutoSize = true, Font = new Font("Segoe UI", 10), ForeColor = Color.FromArgb(106, 117, 136), Text = "Las plantillas se cifran en esta computadora. No se almacenan imágenes.", Dock = DockStyle.Right, TextAlign = ContentAlignment.MiddleRight };
-        panel.Controls.Add(note);
-        panel.Controls.Add(title);
+        panel.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI", 10), ForeColor = Color.FromArgb(106, 117, 136), Text = "Las plantillas se cifran en esta computadora. La imagen mostrada no se almacena.", Dock = DockStyle.Right, TextAlign = ContentAlignment.MiddleRight });
+        panel.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 13), ForeColor = Navy, Text = "CREPE  /  CHECADOR BIOMÉTRICO", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft });
         return panel;
     }
 
@@ -156,7 +144,6 @@ internal sealed class BridgeForm : Form
         {
             await Task.Delay(250, cancellationToken);
             var employees = await new CrepeClient(BridgeSettingsStore.Read()).FindEmployeesAsync(employeeSearch.Text, cancellationToken);
-
             if (cancellationToken.IsCancellationRequested)
             {
                 return;
@@ -177,7 +164,7 @@ internal sealed class BridgeForm : Form
         }
         catch (Exception exception)
         {
-            SetStatus("No se pudo consultar al equipo.", exception.Message, Danger);
+            SetStatus("No se pudo consultar al equipo", exception.Message, Danger);
         }
         finally
         {
@@ -187,25 +174,22 @@ internal sealed class BridgeForm : Form
 
     private async Task UpdateSelectedEmployeeAsync()
     {
-        if (isUpdatingEmployees)
+        if (isUpdatingEmployees || employeeSearch.SelectedItem is not EmployeeOption employee)
         {
             return;
         }
 
-        if (employeeSearch.SelectedItem is EmployeeOption employee)
-        {
-            selectedEmployeeOption = employee;
-            selectedEmployee.Text = $"Seleccionado: {employee.Name}{(string.IsNullOrWhiteSpace(employee.Position) ? string.Empty : $" · {employee.Position}")}";
-            await StopKioskAsync();
-            SetStatus("Listo para registrar", "Pulsa Registrar huella; el lector se reservó para este colaborador.", Indigo);
-        }
+        selectedEmployeeOption = employee;
+        selectedEmployee.Text = $"Seleccionado: {employee.Name}{(string.IsNullOrWhiteSpace(employee.Position) ? string.Empty : $" · {employee.Position}")}";
+        await StopKioskAsync();
+        SetStatus("Listo para registrar", "Pulsa Registrar huella; el lector quedó reservado para este colaborador.", Indigo);
     }
 
     private async Task EnrollAsync()
     {
         if (selectedEmployeeOption is not { } employee)
         {
-            SetStatus("Selecciona un nombre de la lista antes de registrar.", "Busca al colaborador y tócala en la lista.", Danger);
+            SetStatus("Selecciona un nombre de la lista antes de registrar", "Busca al colaborador y tócala en la lista.", Danger);
             return;
         }
 
@@ -216,27 +200,16 @@ internal sealed class BridgeForm : Form
 
         try
         {
-            var templates = new List<FingerprintTemplate>();
-
-            for (var sample = 1; sample <= 3; sample++)
-            {
-                SetStatus($"Registro {sample} de 3", "Coloca el mismo dedo sobre el lector.", Indigo);
-                templates.Add(await FingerprintCapture.CaptureAsync(enrollmentCancellation.Token));
-
-                if (sample < 3)
-                {
-                    SetStatus($"Registro {sample} guardado", "Retira el dedo y vuelve a colocarlo para la siguiente lectura.", Indigo);
-                    await Task.Delay(TimeSpan.FromSeconds(1));
-                }
-            }
-
+            SetStatus("Registrar huella", "Coloca el dedo una vez. Se cancelará si no hay lectura en 15 segundos.", Indigo);
+            var capture = await CaptureForEnrollmentAsync(enrollmentCancellation.Token);
+            ShowPreview(capture.Preview);
             var templateId = Guid.NewGuid();
-            vault.Save(templateId, employee.Id, templates);
+            vault.Save(templateId, employee.Id, [capture.Template]);
 
             try
             {
                 var message = await new CrepeClient(BridgeSettingsStore.Read()).EnrollAsync(employee.Id, templateId);
-                SetStatus("Registro terminado", message, Success);
+                SetStatus("Huella registrada", $"{employee.Name}. {message}", Success);
             }
             catch
             {
@@ -262,6 +235,21 @@ internal sealed class BridgeForm : Form
         }
     }
 
+    private static async Task<CapturedFingerprint> CaptureForEnrollmentAsync(CancellationToken cancellationToken)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var combined = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+
+        try
+        {
+            return await FingerprintCapture.CaptureAsync(combined.Token);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new InvalidOperationException("No se detectó una huella en 15 segundos. Intenta de nuevo con el dedo centrado.");
+        }
+    }
+
     private void StartKiosk()
     {
         if (kioskTask is { IsCompleted: false })
@@ -281,7 +269,6 @@ internal sealed class BridgeForm : Form
     private async Task StopKioskAsync()
     {
         StopKiosk();
-
         if (kioskTask is not null)
         {
             await kioskTask;
@@ -299,9 +286,9 @@ internal sealed class BridgeForm : Form
             try
             {
                 SetStatus("Lector activo", "Coloca un dedo para registrar entrada o salida.", Indigo);
-                var probe = await FingerprintCapture.CaptureAsync(cancellationToken);
-                var match = vault.Find(probe);
-
+                var capture = await FingerprintCapture.CaptureAsync(cancellationToken);
+                ShowPreview(capture.Preview);
+                var match = vault.Find(capture.Template);
                 if (match is null || !match.IsRecognized)
                 {
                     SetStatus("Huella no reconocida", "Pide a recepción que registre la huella del colaborador.", Danger);
@@ -309,8 +296,9 @@ internal sealed class BridgeForm : Form
                     continue;
                 }
 
-                var message = await new CrepeClient(BridgeSettingsStore.Read()).RegisterAsync(match.Template.TemplateId);
-                SetStatus("Registro guardado", message, Success);
+                var record = await new CrepeClient(BridgeSettingsStore.Read()).RegisterAsync(match.Template.TemplateId);
+                var checkLabel = record.Status == "checked_in" ? "Entrada registrada" : "Salida registrada";
+                SetStatus(checkLabel, $"{record.EmployeeName} · {record.CheckedAt}", Success);
                 await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -330,10 +318,17 @@ internal sealed class BridgeForm : Form
         }
     }
 
+    private void ShowPreview(Bitmap preview)
+    {
+        var previous = fingerprintPreview.Image;
+        fingerprintPreview.Image = preview;
+        fingerprintIcon.Visible = false;
+        previous?.Dispose();
+    }
+
     private void EditSettings()
     {
         using var dialog = new SettingsForm(BridgeSettingsStore.Read());
-
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             BridgeSettingsStore.Write(dialog.Settings);
@@ -358,19 +353,7 @@ internal sealed class BridgeForm : Form
 
     private static Button CreateButton(string text, Color backColor, Color? foreColor = null)
     {
-        return new Button
-        {
-            AutoSize = false,
-            BackColor = backColor,
-            Cursor = Cursors.Hand,
-            FlatAppearance = { BorderSize = 0 },
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI Semibold", 12),
-            ForeColor = foreColor ?? Color.White,
-            Height = 48,
-            Text = text,
-            Width = 440,
-        };
+        return new Button { AutoSize = false, BackColor = backColor, Cursor = Cursors.Hand, FlatAppearance = { BorderSize = 0 }, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI Semibold", 12), ForeColor = foreColor ?? Color.White, Height = 48, Text = text, Width = 440 };
     }
 
     private static Panel CreateCard()
@@ -392,20 +375,16 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ClientSize = new Size(510, 190);
-
         crepeUrl.Text = settings.CrepeUrl;
         bridgeKey.Text = settings.BridgeKey;
-
         var save = new Button { AutoSize = true, DialogResult = DialogResult.OK, Text = "Guardar" };
         var cancel = new Button { AutoSize = true, DialogResult = DialogResult.Cancel, Text = "Cancelar" };
         var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(24), WrapContents = false };
-
         panel.Controls.Add(new Label { AutoSize = true, Text = "Dirección de Crepe local" });
         panel.Controls.Add(crepeUrl);
         panel.Controls.Add(new Label { AutoSize = true, Padding = new Padding(0, 10, 0, 0), Text = "Clave del puente" });
         panel.Controls.Add(bridgeKey);
         panel.Controls.Add(new FlowLayoutPanel { AutoSize = true, Controls = { save, cancel } });
-
         Controls.Add(panel);
         AcceptButton = save;
         CancelButton = cancel;
