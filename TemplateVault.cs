@@ -4,7 +4,7 @@ namespace CrepeBiometricBridge;
 
 internal sealed class TemplateVault
 {
-    private const double MatchThreshold = 40;
+    private const double MatchThreshold = 20;
     private const string Filename = "templates.dat";
 
     public void Save(Guid templateId, int employeeId, FingerprintTemplate template)
@@ -29,6 +29,13 @@ internal sealed class TemplateVault
             .OrderByDescending(result => result.Score)
             .Select(result => result.Template)
             .FirstOrDefault();
+    }
+
+    public void Delete(Guid templateId)
+    {
+        var templates = Read();
+        templates.RemoveAll(template => template.TemplateId == templateId);
+        EncryptedStore.Write(Filename, templates);
     }
 
     private static List<StoredTemplate> Read()

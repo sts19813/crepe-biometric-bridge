@@ -66,8 +66,16 @@ internal sealed class BridgeForm : Form
 
             vault.Save(templateId, parsedEmployeeId, template);
 
-            var message = await new CrepeClient(BridgeSettingsStore.Read()).EnrollAsync(parsedEmployeeId, templateId);
-            SetStatus(message, Color.DarkGreen);
+            try
+            {
+                var message = await new CrepeClient(BridgeSettingsStore.Read()).EnrollAsync(parsedEmployeeId, templateId);
+                SetStatus(message, Color.DarkGreen);
+            }
+            catch
+            {
+                vault.Delete(templateId);
+                throw;
+            }
         });
     }
 
