@@ -15,7 +15,7 @@ internal sealed class TemplateVault
         EncryptedStore.Write(Filename, templates);
     }
 
-    public StoredTemplate? Find(FingerprintTemplate probe)
+    public StoredMatch? Find(FingerprintTemplate probe)
     {
         var matcher = new FingerprintMatcher(probe);
 
@@ -25,9 +25,8 @@ internal sealed class TemplateVault
                 Template = template,
                 Score = matcher.Match(new FingerprintTemplate(Convert.FromBase64String(template.Template))),
             })
-            .Where(result => result.Score >= MatchThreshold)
             .OrderByDescending(result => result.Score)
-            .Select(result => result.Template)
+            .Select(result => new StoredMatch(result.Template, result.Score, result.Score >= MatchThreshold))
             .FirstOrDefault();
     }
 
@@ -45,3 +44,5 @@ internal sealed class TemplateVault
 }
 
 internal sealed record StoredTemplate(Guid TemplateId, int EmployeeId, string Template);
+
+internal sealed record StoredMatch(StoredTemplate Template, double Score, bool IsRecognized);

@@ -89,11 +89,17 @@ internal sealed class BridgeForm : Form
 
             if (match is null)
             {
-                SetStatus("Huella no reconocida.", Color.DarkRed);
+                SetStatus("No hay huellas registradas en esta computadora.", Color.DarkRed);
                 return;
             }
 
-            var message = await new CrepeClient(BridgeSettingsStore.Read()).RegisterAsync(match.TemplateId);
+            if (!match.IsRecognized)
+            {
+                SetStatus($"Huella no reconocida. Puntaje: {match.Score:F1}.", Color.DarkRed);
+                return;
+            }
+
+            var message = await new CrepeClient(BridgeSettingsStore.Read()).RegisterAsync(match.Template.TemplateId);
             SetStatus(message, Color.DarkGreen);
         });
     }
