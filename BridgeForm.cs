@@ -13,7 +13,7 @@ internal sealed class BridgeForm : Form
     private readonly Label selectedEmployee = new() { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), MaximumSize = new Size(440, 0), Text = "Busca y selecciona al colaborador para registrar su huella." };
     private readonly Button enroll = CreateButton("Registrar huella", Indigo);
     private readonly Button settings = CreateButton("Configuración", Color.FromArgb(225, 231, 241), Navy);
-    private readonly Label statusTitle = new() { AutoSize = true, Font = new Font("Segoe UI Semibold", 16), ForeColor = Navy, Text = "Lector activo" };
+    private readonly Label statusTitle = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 16), ForeColor = Navy, Text = "Lector activo", TextAlign = ContentAlignment.MiddleCenter };
     private readonly Label statusDetail = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12), ForeColor = Color.FromArgb(83, 95, 114), TextAlign = ContentAlignment.TopCenter };
     private readonly Label fingerprintIcon = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 23), ForeColor = Indigo, Text = "HUELLA", TextAlign = ContentAlignment.MiddleCenter };
     private readonly TemplateVault vault = new();
@@ -21,13 +21,14 @@ internal sealed class BridgeForm : Form
     private CancellationTokenSource? searchCancellation;
     private Task? kioskTask;
     private bool isUpdatingEmployees;
+    private EmployeeOption? selectedEmployeeOption;
 
     public BridgeForm()
     {
         Text = "Crepe · Checador biométrico";
         BackColor = Background;
-        ClientSize = new Size(1000, 650);
-        MinimumSize = new Size(850, 590);
+        ClientSize = new Size(760, 780);
+        MinimumSize = new Size(620, 700);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 11);
 
@@ -42,16 +43,16 @@ internal sealed class BridgeForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
 
-        var content = new TableLayoutPanel { ColumnCount = 2, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 20) };
-        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
-        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+        var content = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 20), RowCount = 2 };
+        content.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+        content.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
         content.Controls.Add(CreateEnrollmentCard(), 0, 0);
-        content.Controls.Add(CreateReaderCard(), 1, 0);
+        content.Controls.Add(CreateReaderCard(), 0, 1);
         root.Controls.Add(content, 0, 0);
         root.Controls.Add(CreateStatusCard(), 0, 1);
         Controls.Add(root);
 
-        employeeSearch.TextChanged += async (_, _) => await QueueEmployeeSearchAsync();
+        employeeSearch.TextUpdate += async (_, _) => await BeginEmployeeSearchAsync();
         employeeSearch.SelectedIndexChanged += (_, _) => UpdateSelectedEmployee();
         enroll.Click += async (_, _) => await EnrollAsync();
         settings.Click += (_, _) => EditSettings();
@@ -66,7 +67,7 @@ internal sealed class BridgeForm : Form
     private Control CreateEnrollmentCard()
     {
         var card = CreateCard();
-        card.Margin = new Padding(0, 0, 12, 0);
+        card.Margin = new Padding(0, 0, 0, 12);
         var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(38), RowCount = 8 };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
@@ -98,7 +99,7 @@ internal sealed class BridgeForm : Form
     private Control CreateReaderCard()
     {
         var card = CreateCard();
-        card.Margin = new Padding(12, 0, 0, 0);
+        card.Margin = new Padding(0, 12, 0, 0);
         var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(38), RowCount = 5 };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -110,7 +111,7 @@ internal sealed class BridgeForm : Form
         var iconCircle = new Panel { BackColor = Color.FromArgb(234, 237, 255), Dock = DockStyle.Fill, Margin = new Padding(26, 26, 26, 20) };
         iconCircle.Controls.Add(fingerprintIcon);
         layout.Controls.Add(iconCircle, 0, 1);
-        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Success, Font = new Font("Segoe UI Semibold", 12), Text = "●  Modo automático activado", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill }, 0, 2);
+        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Success, Font = new Font("Segoe UI Semibold", 12), Text = "●  AUTOMÁTICO", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill }, 0, 2);
         layout.Controls.Add(statusTitle, 0, 3);
         layout.Controls.Add(statusDetail, 0, 4);
         card.Controls.Add(layout);
@@ -125,6 +126,13 @@ internal sealed class BridgeForm : Form
         panel.Controls.Add(note);
         panel.Controls.Add(title);
         return panel;
+    }
+
+    private async Task BeginEmployeeSearchAsync()
+    {
+        selectedEmployeeOption = null;
+        selectedEmployee.Text = "Busca y selecciona al colaborador para registrar su huella.";
+        await QueueEmployeeSearchAsync();
     }
 
     private async Task QueueEmployeeSearchAsync()
@@ -174,15 +182,21 @@ internal sealed class BridgeForm : Form
 
     private void UpdateSelectedEmployee()
     {
+        if (isUpdatingEmployees)
+        {
+            return;
+        }
+
         if (employeeSearch.SelectedItem is EmployeeOption employee)
         {
+            selectedEmployeeOption = employee;
             selectedEmployee.Text = $"Seleccionado: {employee.Name}{(string.IsNullOrWhiteSpace(employee.Position) ? string.Empty : $" · {employee.Position}")}";
         }
     }
 
     private async Task EnrollAsync()
     {
-        if (employeeSearch.SelectedItem is not EmployeeOption employee)
+        if (selectedEmployeeOption is not { } employee)
         {
             SetStatus("Selecciona un nombre de la lista antes de registrar.", "Busca al colaborador y tócala en la lista.", Danger);
             return;
@@ -339,7 +353,7 @@ internal sealed class BridgeForm : Form
             ForeColor = foreColor ?? Color.White,
             Height = 48,
             Text = text,
-            Width = 250,
+            Width = 440,
         };
     }
 
