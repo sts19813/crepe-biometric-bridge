@@ -56,7 +56,7 @@ internal sealed class BridgeForm : Form
         Controls.Add(root);
 
         employeeSearch.TextUpdate += async (_, _) => await BeginEmployeeSearchAsync();
-        employeeSearch.SelectedIndexChanged += (_, _) => UpdateSelectedEmployee();
+        employeeSearch.SelectedIndexChanged += async (_, _) => await UpdateSelectedEmployeeAsync();
         enroll.Click += async (_, _) => await EnrollAsync();
         cancelEnrollment.Click += (_, _) => enrollmentCancellation?.Cancel();
         settings.Click += (_, _) => EditSettings();
@@ -185,7 +185,7 @@ internal sealed class BridgeForm : Form
         }
     }
 
-    private void UpdateSelectedEmployee()
+    private async Task UpdateSelectedEmployeeAsync()
     {
         if (isUpdatingEmployees)
         {
@@ -196,6 +196,8 @@ internal sealed class BridgeForm : Form
         {
             selectedEmployeeOption = employee;
             selectedEmployee.Text = $"Seleccionado: {employee.Name}{(string.IsNullOrWhiteSpace(employee.Position) ? string.Empty : $" · {employee.Position}")}";
+            await StopKioskAsync();
+            SetStatus("Listo para registrar", "Pulsa Registrar huella; el lector se reservó para este colaborador.", Indigo);
         }
     }
 

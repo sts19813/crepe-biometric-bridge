@@ -5,15 +5,25 @@ namespace CrepeBiometricBridge;
 
 internal static class FingerprintCapture
 {
+    private static readonly SemaphoreSlim CaptureGate = new(1, 1);
     private const uint FingerprintFactor = 8;
     private const uint SystemPool = 1;
     private const uint RawSession = 1;
     private const uint VerifyPurpose = 2;
     private const uint RawSample = 0x20;
 
-    public static Task<FingerprintTemplate> CaptureAsync(CancellationToken cancellationToken)
+    public static async Task<FingerprintTemplate> CaptureAsync(CancellationToken cancellationToken)
     {
-        return Task.Run(() => Capture(cancellationToken), cancellationToken);
+        await CaptureGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            return await Task.Run(() => Capture(cancellationToken), cancellationToken);
+        }
+        finally
+        {
+            CaptureGate.Release();
+        }
     }
 
     private static FingerprintTemplate Capture(CancellationToken cancellationToken)
