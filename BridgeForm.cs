@@ -13,6 +13,7 @@ internal sealed class BridgeForm : Form
     private readonly Label selectedEmployee = new() { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), MaximumSize = new Size(440, 0), Text = "Busca y selecciona al colaborador para registrar su huella." };
     private readonly Button enroll = CreateButton("Registrar huella", Indigo);
     private readonly Button settings = CreateButton("Configuración", Color.FromArgb(225, 231, 241), Navy);
+    private readonly Button cancelEnrollment = CreateButton("Cancelar registro", Color.FromArgb(251, 231, 233), Danger);
     private readonly Label statusTitle = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 16), ForeColor = Navy, Text = "Lector activo", TextAlign = ContentAlignment.MiddleCenter };
     private readonly Label statusDetail = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12), ForeColor = Color.FromArgb(83, 95, 114), TextAlign = ContentAlignment.TopCenter };
     private readonly Label fingerprintIcon = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 23), ForeColor = Indigo, Text = "HUELLA", TextAlign = ContentAlignment.MiddleCenter };
@@ -22,15 +23,17 @@ internal sealed class BridgeForm : Form
     private Task? kioskTask;
     private bool isUpdatingEmployees;
     private EmployeeOption? selectedEmployeeOption;
+    private CancellationTokenSource? enrollmentCancellation;
 
     public BridgeForm()
     {
         Text = "Crepe · Checador biométrico";
         BackColor = Background;
-        ClientSize = new Size(760, 780);
-        MinimumSize = new Size(620, 700);
+        ClientSize = new Size(1000, 650);
+        MinimumSize = new Size(900, 590);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 11);
+        cancelEnrollment.Visible = false;
 
         var root = new TableLayoutPanel
         {
@@ -43,11 +46,11 @@ internal sealed class BridgeForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
 
-        var content = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 20), RowCount = 2 };
-        content.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
-        content.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        var content = new TableLayoutPanel { ColumnCount = 2, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 20) };
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 56));
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44));
         content.Controls.Add(CreateEnrollmentCard(), 0, 0);
-        content.Controls.Add(CreateReaderCard(), 0, 1);
+        content.Controls.Add(CreateReaderCard(), 1, 0);
         root.Controls.Add(content, 0, 0);
         root.Controls.Add(CreateStatusCard(), 0, 1);
         Controls.Add(root);
@@ -55,6 +58,7 @@ internal sealed class BridgeForm : Form
         employeeSearch.TextUpdate += async (_, _) => await BeginEmployeeSearchAsync();
         employeeSearch.SelectedIndexChanged += (_, _) => UpdateSelectedEmployee();
         enroll.Click += async (_, _) => await EnrollAsync();
+        cancelEnrollment.Click += (_, _) => enrollmentCancellation?.Cancel();
         settings.Click += (_, _) => EditSettings();
         Shown += async (_, _) =>
         {
@@ -67,7 +71,7 @@ internal sealed class BridgeForm : Form
     private Control CreateEnrollmentCard()
     {
         var card = CreateCard();
-        card.Margin = new Padding(0, 0, 0, 12);
+        card.Margin = new Padding(0, 0, 12, 0);
         var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(38), RowCount = 8 };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
@@ -75,7 +79,7 @@ internal sealed class BridgeForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
         layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Registrar colaborador" }, 0, 0);
@@ -84,6 +88,7 @@ internal sealed class BridgeForm : Form
         layout.Controls.Add(selectedEmployee, 0, 3);
         layout.Controls.Add(enroll, 0, 4);
         layout.Controls.Add(settings, 0, 5);
+        layout.Controls.Add(cancelEnrollment, 0, 6);
         layout.Controls.Add(new Label
         {
             AutoSize = true,
@@ -99,7 +104,7 @@ internal sealed class BridgeForm : Form
     private Control CreateReaderCard()
     {
         var card = CreateCard();
-        card.Margin = new Padding(0, 12, 0, 0);
+        card.Margin = new Padding(12, 0, 0, 0);
         var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(38), RowCount = 5 };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -204,6 +209,8 @@ internal sealed class BridgeForm : Form
 
         await StopKioskAsync();
         SetButtonsEnabled(false);
+        enrollmentCancellation = new CancellationTokenSource();
+        cancelEnrollment.Visible = true;
 
         try
         {
@@ -212,7 +219,7 @@ internal sealed class BridgeForm : Form
             for (var sample = 1; sample <= 3; sample++)
             {
                 SetStatus($"Registro {sample} de 3", "Coloca el mismo dedo sobre el lector.", Indigo);
-                templates.Add(await FingerprintCapture.CaptureAsync(CancellationToken.None));
+                templates.Add(await FingerprintCapture.CaptureAsync(enrollmentCancellation.Token));
 
                 if (sample < 3)
                 {
@@ -235,12 +242,19 @@ internal sealed class BridgeForm : Form
                 throw;
             }
         }
+        catch (OperationCanceledException)
+        {
+            SetStatus("Registro cancelado", "El lector volvió al modo automático.", Indigo);
+        }
         catch (Exception exception)
         {
             SetStatus("No se pudo registrar la huella", exception.Message, Danger);
         }
         finally
         {
+            enrollmentCancellation?.Dispose();
+            enrollmentCancellation = null;
+            cancelEnrollment.Visible = false;
             SetButtonsEnabled(true);
             StartKiosk();
         }
