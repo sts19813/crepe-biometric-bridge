@@ -11,6 +11,7 @@ internal sealed class BridgeForm : Form
     private readonly ListBox employeeList = new() { BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11), IntegralHeight = false };
     private readonly Label selectedEmployee = new() { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), MaximumSize = new Size(440, 0), Text = "Busca y selecciona al colaborador para registrar su huella." };
     private readonly Button enroll = CreateButton("Registrar huella", Indigo);
+    private readonly Button unenroll = CreateButton("Eliminar huella registrada", Color.FromArgb(251, 231, 233), Danger);
     private readonly Button settings = CreateButton("Configuración", Color.FromArgb(225, 231, 241), Navy);
     private readonly Button cancelEnrollment = CreateButton("Cancelar registro", Color.FromArgb(251, 231, 233), Danger);
     private readonly Label statusTitle = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 16), ForeColor = Navy, Text = "Lector activo", TextAlign = ContentAlignment.MiddleCenter };
@@ -18,6 +19,9 @@ internal sealed class BridgeForm : Form
     private readonly Label fingerprintIcon = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 23), ForeColor = Indigo, Text = "HUELLA", TextAlign = ContentAlignment.MiddleCenter };
     private readonly PictureBox fingerprintPreview = new() { BackColor = Color.FromArgb(234, 237, 255), Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
     private readonly TemplateVault vault = new();
+    private readonly TabControl tabs = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 11) };
+    private readonly ListView history = new() { Dock = DockStyle.Fill, FullRowSelect = true, GridLines = true, HideSelection = false, View = View.Details };
+    private readonly Button refreshHistory = CreateButton("Actualizar historial", Indigo);
     private CancellationTokenSource? kioskCancellation;
     private CancellationTokenSource? searchCancellation;
     private Task? kioskTask;
@@ -40,12 +44,10 @@ internal sealed class BridgeForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
 
-        var content = new TableLayoutPanel { ColumnCount = 2, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 20) };
-        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 56));
-        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44));
-        content.Controls.Add(CreateEnrollmentCard(), 0, 0);
-        content.Controls.Add(CreateReaderCard(), 1, 0);
-        root.Controls.Add(content, 0, 0);
+        tabs.TabPages.Add(CreateTab("Checador", CreateReaderCard()));
+        tabs.TabPages.Add(CreateTab("Registrar huellas", CreateEnrollmentCard()));
+        tabs.TabPages.Add(CreateTab("Historial", CreateHistoryCard()));
+        root.Controls.Add(tabs, 0, 0);
         root.Controls.Add(CreateStatusCard(), 0, 1);
         Controls.Add(root);
 
@@ -53,7 +55,16 @@ internal sealed class BridgeForm : Form
         employeeList.SelectedIndexChanged += (_, _) => UpdateSelectedEmployee();
         enroll.Click += (_, _) => ArmEnrollment();
         cancelEnrollment.Click += (_, _) => CancelEnrollment();
+        unenroll.Click += async (_, _) => await UnenrollAsync();
+        refreshHistory.Click += async (_, _) => await LoadHistoryAsync();
         settings.Click += (_, _) => EditSettings();
+        tabs.SelectedIndexChanged += async (_, _) =>
+        {
+            if (tabs.SelectedIndex == 2)
+            {
+                await LoadHistoryAsync();
+            }
+        };
         Shown += async (_, _) =>
         {
             await QueueEmployeeSearchAsync();
@@ -70,7 +81,7 @@ internal sealed class BridgeForm : Form
     {
         var card = CreateCard();
         card.Margin = new Padding(0, 0, 12, 0);
-        var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(30), RowCount = 9 };
+        var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(30), RowCount = 10 };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
@@ -79,6 +90,7 @@ internal sealed class BridgeForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Registrar colaborador" }, 0, 0);
         layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), Text = "Busca o toca un nombre para registrar su huella." }, 0, 1);
@@ -86,9 +98,10 @@ internal sealed class BridgeForm : Form
         layout.Controls.Add(employeeList, 0, 3);
         layout.Controls.Add(selectedEmployee, 0, 4);
         layout.Controls.Add(enroll, 0, 5);
-        layout.Controls.Add(cancelEnrollment, 0, 6);
-        layout.Controls.Add(settings, 0, 7);
-        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(106, 117, 136), MaximumSize = new Size(440, 0), Text = "El lector permanece listo: al registrar, la siguiente huella se asigna al nombre seleccionado." }, 0, 8);
+        layout.Controls.Add(unenroll, 0, 6);
+        layout.Controls.Add(cancelEnrollment, 0, 7);
+        layout.Controls.Add(settings, 0, 8);
+        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(106, 117, 136), MaximumSize = new Size(620, 0), Text = "Eliminar huella no borra al colaborador ni su historial. El lector permanece activo para la siguiente lectura." }, 0, 9);
         card.Controls.Add(layout);
         return card;
     }
@@ -112,6 +125,37 @@ internal sealed class BridgeForm : Form
         layout.Controls.Add(statusTitle, 0, 3);
         layout.Controls.Add(statusDetail, 0, 4);
         card.Controls.Add(layout);
+        return card;
+    }
+
+    private static TabPage CreateTab(string title, Control content)
+    {
+        var tab = new TabPage(title) { BackColor = Background, Padding = new Padding(0, 12, 0, 0), UseVisualStyleBackColor = false };
+        content.Dock = DockStyle.Fill;
+        tab.Controls.Add(content);
+
+        return tab;
+    }
+
+    private Control CreateHistoryCard()
+    {
+        history.Columns.Add("Fecha", 130, HorizontalAlignment.Left);
+        history.Columns.Add("Colaborador", 360, HorizontalAlignment.Left);
+        history.Columns.Add("Entrada", 150, HorizontalAlignment.Center);
+        history.Columns.Add("Salida", 150, HorizontalAlignment.Center);
+
+        var card = CreateCard();
+        var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(30), RowCount = 4 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Historial de checadas" }, 0, 0);
+        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), Text = "Últimos 50 registros de entrada y salida guardados en Crepe local." }, 0, 1);
+        layout.Controls.Add(history, 0, 2);
+        layout.Controls.Add(refreshHistory, 0, 3);
+        card.Controls.Add(layout);
+
         return card;
     }
 
@@ -195,6 +239,7 @@ internal sealed class BridgeForm : Form
         employeeList.Enabled = false;
         employeeSearch.Enabled = false;
         SetStatus("Esperando huella", $"{employee.Name}: coloca el dedo. El lector ya está activo.", Indigo);
+        tabs.SelectedIndex = 0;
     }
 
     private void CancelEnrollment()
@@ -203,6 +248,73 @@ internal sealed class BridgeForm : Form
         cancelEnrollment.Visible = false;
         SetButtonsEnabled(true);
         SetStatus("Lector activo", "Registro cancelado. Coloca un dedo para registrar entrada o salida.", Indigo);
+    }
+
+    private async Task UnenrollAsync()
+    {
+        if (selectedEmployeeOption is not { } employee)
+        {
+            MessageBox.Show(this, "Selecciona un colaborador de la lista.", "Eliminar huella", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var confirmation = MessageBox.Show(
+            this,
+            $"¿Eliminar la huella registrada de {employee.Name}? El colaborador y su historial de asistencia no se borrarán.",
+            "Confirmar eliminación de huella",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (confirmation != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            await new CrepeClient(BridgeSettingsStore.Read()).UnenrollAsync(employee.Id);
+            vault.DeleteEmployee(employee.Id);
+            pendingEnrollment = null;
+            cancelEnrollment.Visible = false;
+            SetButtonsEnabled(true);
+            selectedEmployee.Text = $"Huella eliminada: {employee.Name}. Ya puedes registrarla de nuevo.";
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "No se pudo eliminar la huella", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        refreshHistory.Enabled = false;
+
+        try
+        {
+            var records = await new CrepeClient(BridgeSettingsStore.Read()).HistoryAsync(CancellationToken.None);
+            history.BeginUpdate();
+            history.Items.Clear();
+
+            foreach (var record in records)
+            {
+                history.Items.Add(new ListViewItem([
+                    record.WorkDate,
+                    record.EmployeeName,
+                    record.CheckedInAt ?? "—",
+                    record.CheckedOutAt ?? "Pendiente",
+                ]));
+            }
+
+            history.EndUpdate();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "No se pudo cargar el historial", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            refreshHistory.Enabled = true;
+        }
     }
 
     private void StartKiosk()
@@ -346,6 +458,7 @@ internal sealed class BridgeForm : Form
     private void SetButtonsEnabled(bool enabled)
     {
         enroll.Enabled = enabled;
+        unenroll.Enabled = enabled;
         settings.Enabled = enabled;
         employeeSearch.Enabled = enabled;
         employeeList.Enabled = enabled;

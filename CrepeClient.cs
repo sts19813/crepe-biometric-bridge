@@ -26,6 +26,20 @@ internal sealed class CrepeClient(BridgeSettings settings)
         return await MessageAsync(response, "La huella fue ligada al empleado en Crepe.");
     }
 
+    public async Task<string> UnenrollAsync(int employeeId)
+    {
+        using var response = await client.PostAsJsonAsync("checks/biometrico/bridge/unenroll", new { employee_id = employeeId });
+
+        return await MessageAsync(response, "Huella eliminada.");
+    }
+
+    public async Task<IReadOnlyList<AttendanceHistory>> HistoryAsync(CancellationToken cancellationToken)
+    {
+        var response = await client.GetFromJsonAsync<HistoryResponse>("checks/biometrico/bridge/history?limit=50", cancellationToken);
+
+        return response?.Records ?? [];
+    }
+
     public async Task<CheckRecord> RegisterAsync(Guid templateId)
     {
         using var response = await client.PostAsJsonAsync("checks/biometrico/bridge/registrar", new
@@ -88,6 +102,8 @@ internal sealed class CrepeClient(BridgeSettings settings)
         [property: JsonPropertyName("checked_at")] string? CheckedAt);
 
     private sealed record EmployeesResponse(IReadOnlyList<EmployeeOption>? Employees);
+
+    private sealed record HistoryResponse(IReadOnlyList<AttendanceHistory>? Records);
 }
 
 internal sealed class CrepeBridgeException(string message, int statusCode) : InvalidOperationException(message)
@@ -96,6 +112,12 @@ internal sealed class CrepeBridgeException(string message, int statusCode) : Inv
 }
 
 internal sealed record CheckRecord(string EmployeeName, string CheckedAt, string Status, string Message);
+
+internal sealed record AttendanceHistory(
+    [property: JsonPropertyName("employee_name")] string EmployeeName,
+    [property: JsonPropertyName("work_date")] string WorkDate,
+    [property: JsonPropertyName("checked_in_at")] string? CheckedInAt,
+    [property: JsonPropertyName("checked_out_at")] string? CheckedOutAt);
 
 internal sealed record EmployeeOption(int Id, string Name, string? Position)
 {

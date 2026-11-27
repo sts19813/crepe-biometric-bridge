@@ -37,6 +37,13 @@ internal sealed class TemplateVault
         EncryptedStore.Write(Filename, templates);
     }
 
+    public void DeleteEmployee(int employeeId)
+    {
+        var templates = Read();
+        templates.RemoveAll(template => template.EmployeeId == employeeId);
+        EncryptedStore.Write(Filename, templates);
+    }
+
     private static List<StoredTemplate> Read()
     {
         return EncryptedStore.Read(Filename, new List<StoredTemplate>());
