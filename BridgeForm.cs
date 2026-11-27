@@ -7,9 +7,10 @@ internal sealed class BridgeForm : Form
     private static readonly Color Background = Color.FromArgb(244, 247, 252);
     private static readonly Color Success = Color.FromArgb(18, 145, 102);
     private static readonly Color Danger = Color.FromArgb(202, 68, 80);
-    private readonly TextBox employeeSearch = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12) };
+    private readonly TextBox employeeSearch = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12), PlaceholderText = "Escribe un nombre para buscar" };
     private readonly ListBox employeeList = new() { BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11), IntegralHeight = false };
     private readonly Label selectedEmployee = new() { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), MaximumSize = new Size(440, 0), Text = "Busca y selecciona al colaborador para registrar su huella." };
+    private readonly Label registrationNotice = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 11), ForeColor = Color.FromArgb(83, 95, 114), Text = "Selecciona a una persona y registra su huella.", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button enroll = CreateButton("Registrar huella", Indigo);
     private readonly Button unenroll = CreateButton("Eliminar huella registrada", Color.FromArgb(251, 231, 233), Danger);
     private readonly Button settings = CreateButton("Configuración", Color.FromArgb(225, 231, 241), Navy);
@@ -42,7 +43,7 @@ internal sealed class BridgeForm : Form
 
         var root = new TableLayoutPanel { BackColor = Background, ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(24), RowCount = 2 };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
 
         tabs.TabPages.Add(CreateTab("Checador", CreateReaderCard()));
         tabs.TabPages.Add(CreateTab("Registrar huellas", CreateEnrollmentCard()));
@@ -81,16 +82,16 @@ internal sealed class BridgeForm : Form
     {
         var card = CreateCard();
         card.Margin = new Padding(0, 0, 12, 0);
-        var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(30), RowCount = 10 };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(22), RowCount = 10 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Registrar colaborador" }, 0, 0);
         layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), Text = "Busca o toca un nombre para registrar su huella." }, 0, 1);
@@ -101,7 +102,7 @@ internal sealed class BridgeForm : Form
         layout.Controls.Add(unenroll, 0, 6);
         layout.Controls.Add(cancelEnrollment, 0, 7);
         layout.Controls.Add(settings, 0, 8);
-        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(106, 117, 136), MaximumSize = new Size(620, 0), Text = "Eliminar huella no borra al colaborador ni su historial. El lector permanece activo para la siguiente lectura." }, 0, 9);
+        layout.Controls.Add(registrationNotice, 0, 9);
         card.Controls.Add(layout);
         return card;
     }
@@ -223,6 +224,7 @@ internal sealed class BridgeForm : Form
         selectedEmployeeOption = employee;
         selectedEmployee.Text = $"Seleccionado: {employee.Name}{(string.IsNullOrWhiteSpace(employee.Position) ? string.Empty : $" · {employee.Position}")}";
         SetStatus("Listo para registrar", $"Pulsa Registrar huella para preparar a {employee.Name}.", Indigo);
+        SetRegistrationNotice($"Listo para registrar la huella de {employee.Name}.", Indigo);
     }
 
     private void ArmEnrollment()
@@ -239,7 +241,7 @@ internal sealed class BridgeForm : Form
         employeeList.Enabled = false;
         employeeSearch.Enabled = false;
         SetStatus("Esperando huella", $"{employee.Name}: coloca el dedo. El lector ya está activo.", Indigo);
-        tabs.SelectedIndex = 0;
+        SetRegistrationNotice($"Esperando la huella de {employee.Name}…", Indigo);
     }
 
     private void CancelEnrollment()
@@ -248,6 +250,7 @@ internal sealed class BridgeForm : Form
         cancelEnrollment.Visible = false;
         SetButtonsEnabled(true);
         SetStatus("Lector activo", "Registro cancelado. Coloca un dedo para registrar entrada o salida.", Indigo);
+        SetRegistrationNotice("Registro cancelado. Selecciona otra persona si quieres intentarlo de nuevo.", Indigo);
     }
 
     private async Task UnenrollAsync()
@@ -278,6 +281,7 @@ internal sealed class BridgeForm : Form
             cancelEnrollment.Visible = false;
             SetButtonsEnabled(true);
             selectedEmployee.Text = $"Huella eliminada: {employee.Name}. Ya puedes registrarla de nuevo.";
+            SetRegistrationNotice($"Se eliminó la huella de {employee.Name}.", Success);
         }
         catch (Exception exception)
         {
@@ -412,11 +416,13 @@ internal sealed class BridgeForm : Form
             vault.Save(templateId, employee, [capture.Template]);
             var message = await new CrepeClient(BridgeSettingsStore.Read()).EnrollAsync(employee.Id, templateId);
             SetStatus("Huella registrada", $"{employee.Name} · {message}", Success);
+            SetRegistrationNotice($"Se ha guardado la huella de {employee.Name}.", Success);
         }
         catch (Exception exception)
         {
             vault.Delete(templateId);
             SetStatus("No se pudo registrar la huella", $"{employee.Name} · {exception.Message}", Danger);
+            SetRegistrationNotice($"No se pudo guardar la huella de {employee.Name}: {exception.Message}", Danger);
         }
         finally
         {
@@ -470,6 +476,12 @@ internal sealed class BridgeForm : Form
         statusTitle.ForeColor = color;
         statusDetail.Text = detail;
         fingerprintIcon.ForeColor = color;
+    }
+
+    private void SetRegistrationNotice(string message, Color color)
+    {
+        registrationNotice.Text = message;
+        registrationNotice.ForeColor = color;
     }
 
     private static Button CreateButton(string text, Color backColor, Color? foreColor = null)
