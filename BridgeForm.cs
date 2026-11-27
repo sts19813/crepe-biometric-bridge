@@ -2,13 +2,16 @@ namespace CrepeBiometricBridge;
 
 internal sealed class BridgeForm : Form
 {
-    private static readonly Color Navy = Color.FromArgb(16, 33, 62);
-    private static readonly Color Indigo = Color.FromArgb(66, 75, 190);
-    private static readonly Color Background = Color.FromArgb(244, 247, 252);
+    private static readonly Color Navy = Color.FromArgb(18, 29, 53);
+    private static readonly Color Indigo = Color.FromArgb(213, 49, 84);
+    private static readonly Color Background = Color.FromArgb(255, 249, 250);
+    private static readonly Color Surface = Color.White;
+    private static readonly Color RoseSoft = Color.FromArgb(255, 238, 242);
+    private static readonly Color RoseBorder = Color.FromArgb(253, 214, 223);
     private static readonly Color Success = Color.FromArgb(18, 145, 102);
     private static readonly Color Danger = Color.FromArgb(202, 68, 80);
-    private readonly TextBox employeeSearch = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12), PlaceholderText = "Escribe un nombre para buscar" };
-    private readonly ListBox employeeList = new() { BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11), IntegralHeight = false };
+    private readonly TextBox employeeSearch = new() { BackColor = Surface, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12), PlaceholderText = "Escribe un nombre para buscar" };
+    private readonly ListBox employeeList = new() { BackColor = Surface, BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11), IntegralHeight = false };
     private readonly Label selectedEmployee = new() { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), MaximumSize = new Size(440, 0), Text = "Busca y selecciona al colaborador para registrar su huella." };
     private readonly Label registrationNotice = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 11), ForeColor = Color.FromArgb(83, 95, 114), Text = "Selecciona a una persona y registra su huella.", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button enroll = CreateButton("Registrar huella", Indigo);
@@ -18,10 +21,10 @@ internal sealed class BridgeForm : Form
     private readonly Label statusTitle = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 16), ForeColor = Navy, Text = "Lector activo", TextAlign = ContentAlignment.MiddleCenter };
     private readonly Label statusDetail = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12), ForeColor = Color.FromArgb(83, 95, 114), TextAlign = ContentAlignment.TopCenter };
     private readonly Label fingerprintIcon = new() { AutoSize = false, Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 23), ForeColor = Indigo, Text = "HUELLA", TextAlign = ContentAlignment.MiddleCenter };
-    private readonly PictureBox fingerprintPreview = new() { BackColor = Color.FromArgb(234, 237, 255), Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
+    private readonly PictureBox fingerprintPreview = new() { BackColor = RoseSoft, Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
     private readonly TemplateVault vault = new();
-    private readonly TabControl tabs = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 11) };
-    private readonly ListView history = new() { Dock = DockStyle.Fill, FullRowSelect = true, GridLines = true, HideSelection = false, View = View.Details };
+    private readonly TabControl tabs = new() { Dock = DockStyle.Fill, DrawMode = TabDrawMode.OwnerDrawFixed, Font = new Font("Segoe UI Semibold", 11), ItemSize = new Size(174, 42), SizeMode = TabSizeMode.Fixed };
+    private readonly ListView history = new() { BackColor = Surface, BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10), ForeColor = Navy, FullRowSelect = true, GridLines = false, HideSelection = false, View = View.Details };
     private readonly Button refreshHistory = CreateButton("Actualizar historial", Indigo);
     private CancellationTokenSource? kioskCancellation;
     private CancellationTokenSource? searchCancellation;
@@ -35,21 +38,23 @@ internal sealed class BridgeForm : Form
     {
         Text = "Crepe · Checador biométrico";
         BackColor = Background;
-        ClientSize = new Size(1000, 700);
+        ClientSize = new Size(1024, 720);
         MinimumSize = new Size(900, 620);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 11);
         cancelEnrollment.Visible = false;
 
-        var root = new TableLayoutPanel { BackColor = Background, ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(24), RowCount = 2 };
+        var root = new TableLayoutPanel { BackColor = Background, ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(24), RowCount = 3 };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
 
+        root.Controls.Add(CreateBrandHeader(), 0, 0);
         tabs.TabPages.Add(CreateTab("Checador", CreateReaderCard()));
         tabs.TabPages.Add(CreateTab("Registrar huellas", CreateEnrollmentCard()));
         tabs.TabPages.Add(CreateTab("Historial", CreateHistoryCard()));
-        root.Controls.Add(tabs, 0, 0);
-        root.Controls.Add(CreateStatusCard(), 0, 1);
+        root.Controls.Add(tabs, 0, 1);
+        root.Controls.Add(CreateStatusCard(), 0, 2);
         Controls.Add(root);
 
         employeeSearch.TextChanged += async (_, _) => await BeginEmployeeSearchAsync();
@@ -59,6 +64,7 @@ internal sealed class BridgeForm : Form
         unenroll.Click += async (_, _) => await UnenrollAsync();
         refreshHistory.Click += async (_, _) => await LoadHistoryAsync();
         settings.Click += (_, _) => EditSettings();
+        tabs.DrawItem += DrawTab;
         tabs.SelectedIndexChanged += async (_, _) =>
         {
             if (tabs.SelectedIndex == 2)
@@ -76,6 +82,19 @@ internal sealed class BridgeForm : Form
             StopKiosk();
             fingerprintPreview.Image?.Dispose();
         };
+    }
+
+    private Control CreateBrandHeader()
+    {
+        var header = new Panel { BackColor = Navy, Dock = DockStyle.Fill, Padding = new Padding(20, 13, 20, 13) };
+        var brand = new Label { AutoSize = true, Dock = DockStyle.Left, Font = new Font("Segoe UI Semibold", 18), ForeColor = Color.White, Text = "CREPE" };
+        var subtitle = new Label { AutoSize = true, Dock = DockStyle.Left, Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(255, 213, 223), Padding = new Padding(14, 7, 0, 0), Text = "CHECADOR BIOMÉTRICO" };
+        var device = new Label { AutoSize = true, Dock = DockStyle.Right, Font = new Font("Segoe UI Semibold", 9), ForeColor = Color.FromArgb(198, 247, 222), Padding = new Padding(0, 7, 0, 0), Text = "●  HID 4500 LISTO" };
+        header.Controls.Add(device);
+        header.Controls.Add(subtitle);
+        header.Controls.Add(brand);
+
+        return header;
     }
 
     private Control CreateEnrollmentCard()
@@ -118,7 +137,7 @@ internal sealed class BridgeForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
         layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Punto de checada" }, 0, 0);
-        var previewPanel = new Panel { BackColor = Color.FromArgb(234, 237, 255), Dock = DockStyle.Fill, Margin = new Padding(26, 26, 26, 20) };
+        var previewPanel = new Panel { BackColor = RoseSoft, Dock = DockStyle.Fill, Margin = new Padding(26, 26, 26, 20) };
         previewPanel.Controls.Add(fingerprintIcon);
         previewPanel.Controls.Add(fingerprintPreview);
         layout.Controls.Add(previewPanel, 0, 1);
@@ -136,6 +155,22 @@ internal sealed class BridgeForm : Form
         tab.Controls.Add(content);
 
         return tab;
+    }
+
+    private void DrawTab(object? sender, DrawItemEventArgs eventArgs)
+    {
+        var isSelected = eventArgs.Index == tabs.SelectedIndex;
+        var bounds = eventArgs.Bounds;
+        using var background = new SolidBrush(isSelected ? RoseSoft : Background);
+        using var textBrush = new SolidBrush(isSelected ? Indigo : Color.FromArgb(83, 95, 114));
+        eventArgs.Graphics.FillRectangle(background, bounds);
+        TextRenderer.DrawText(eventArgs.Graphics, tabs.TabPages[eventArgs.Index].Text, tabs.Font, bounds, textBrush.Color, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+        if (isSelected)
+        {
+            using var accent = new SolidBrush(Indigo);
+            eventArgs.Graphics.FillRectangle(accent, new Rectangle(bounds.X + 16, bounds.Bottom - 3, Math.Max(0, bounds.Width - 32), 3));
+        }
     }
 
     private Control CreateHistoryCard()
@@ -162,9 +197,9 @@ internal sealed class BridgeForm : Form
 
     private Control CreateStatusCard()
     {
-        var panel = new Panel { BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill, Padding = new Padding(22, 14, 22, 14) };
-        panel.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI", 10), ForeColor = Color.FromArgb(106, 117, 136), Text = "Las plantillas se cifran en esta computadora. La imagen mostrada no se almacena.", Dock = DockStyle.Right, TextAlign = ContentAlignment.MiddleRight });
-        panel.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 13), ForeColor = Navy, Text = "CREPE  /  CHECADOR BIOMÉTRICO", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft });
+        var panel = new Panel { BackColor = Navy, Dock = DockStyle.Fill, Padding = new Padding(22, 12, 22, 12) };
+        panel.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(207, 216, 232), Text = "Las plantillas se cifran en esta computadora. La imagen mostrada no se almacena.", Dock = DockStyle.Right, TextAlign = ContentAlignment.MiddleRight });
+        panel.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 11), ForeColor = Color.White, Text = "CREPE  /  CHECADOR BIOMÉTRICO", Dock = DockStyle.Left, TextAlign = ContentAlignment.MiddleLeft });
         return panel;
     }
 
@@ -486,12 +521,12 @@ internal sealed class BridgeForm : Form
 
     private static Button CreateButton(string text, Color backColor, Color? foreColor = null)
     {
-        return new Button { AutoSize = false, BackColor = backColor, Cursor = Cursors.Hand, FlatAppearance = { BorderSize = 0 }, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI Semibold", 12), ForeColor = foreColor ?? Color.White, Height = 48, Text = text, Width = 440 };
+        return new Button { AutoSize = false, BackColor = backColor, Cursor = Cursors.Hand, FlatAppearance = { BorderColor = RoseBorder, BorderSize = 1, MouseDownBackColor = backColor, MouseOverBackColor = backColor }, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI Semibold", 12), ForeColor = foreColor ?? Color.White, Height = 48, Text = text, Width = 440 };
     }
 
     private static Panel CreateCard()
     {
-        return new Panel { BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill };
+        return new Panel { BackColor = Surface, BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill };
     }
 }
 
