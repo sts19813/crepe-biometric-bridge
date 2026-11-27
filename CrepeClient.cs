@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 namespace CrepeBiometricBridge;
 
@@ -80,7 +81,11 @@ internal sealed class CrepeClient(BridgeSettings settings)
 
     private sealed record BridgeResponse(string? Message);
 
-    private sealed record CheckResponse(string? Message, string? Status, string? EmployeeName, string? CheckedAt);
+    private sealed record CheckResponse(
+        string? Message,
+        string? Status,
+        [property: JsonPropertyName("employee_name")] string? EmployeeName,
+        [property: JsonPropertyName("checked_at")] string? CheckedAt);
 
     private sealed record EmployeesResponse(IReadOnlyList<EmployeeOption>? Employees);
 }

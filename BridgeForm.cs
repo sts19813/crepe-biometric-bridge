@@ -7,8 +7,8 @@ internal sealed class BridgeForm : Form
     private static readonly Color Background = Color.FromArgb(244, 247, 252);
     private static readonly Color Success = Color.FromArgb(18, 145, 102);
     private static readonly Color Danger = Color.FromArgb(202, 68, 80);
-    private readonly TextBox employeeSearch = new() { Font = new Font("Segoe UI", 12), Width = 440 };
-    private readonly ListBox employeeList = new() { BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 11), IntegralHeight = false };
+    private readonly TextBox employeeSearch = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12) };
+    private readonly ListBox employeeList = new() { BorderStyle = BorderStyle.FixedSingle, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11), IntegralHeight = false };
     private readonly Label selectedEmployee = new() { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), MaximumSize = new Size(440, 0), Text = "Busca y selecciona al colaborador para registrar su huella." };
     private readonly Button enroll = CreateButton("Registrar huella", Indigo);
     private readonly Button settings = CreateButton("Configuración", Color.FromArgb(225, 231, 241), Navy);
@@ -271,7 +271,7 @@ internal sealed class BridgeForm : Form
                 currentEmployeeName = EmployeeNameFor(match.Template);
                 var record = await new CrepeClient(BridgeSettingsStore.Read()).RegisterAsync(match.Template.TemplateId);
                 var checkLabel = record.Status == "checked_in" ? "Entrada registrada" : "Salida registrada";
-                SetStatus(checkLabel, $"{record.EmployeeName} · {record.CheckedAt}", Success);
+                SetStatus(record.EmployeeName, $"{checkLabel} · {record.CheckedAt}", Success);
                 await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
