@@ -7,11 +7,11 @@ internal sealed class TemplateVault
     private const double MatchThreshold = 18;
     private const string Filename = "templates.dat";
 
-    public void Save(Guid templateId, int employeeId, IEnumerable<FingerprintTemplate> templatesToStore)
+    public void Save(Guid templateId, EmployeeOption employee, IEnumerable<FingerprintTemplate> templatesToStore)
     {
         var templates = Read();
-        templates.RemoveAll(entry => entry.EmployeeId == employeeId);
-        templates.AddRange(templatesToStore.Select(template => new StoredTemplate(templateId, employeeId, Convert.ToBase64String(template.ToByteArray()))));
+        templates.RemoveAll(entry => entry.EmployeeId == employee.Id);
+        templates.AddRange(templatesToStore.Select(template => new StoredTemplate(templateId, employee.Id, employee.Name, Convert.ToBase64String(template.ToByteArray()))));
         EncryptedStore.Write(Filename, templates);
     }
 
@@ -43,6 +43,6 @@ internal sealed class TemplateVault
     }
 }
 
-internal sealed record StoredTemplate(Guid TemplateId, int EmployeeId, string Template);
+internal sealed record StoredTemplate(Guid TemplateId, int EmployeeId, string? EmployeeName, string Template);
 
 internal sealed record StoredMatch(StoredTemplate Template, double Score, bool IsRecognized);

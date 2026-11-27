@@ -1,5 +1,3 @@
-using SourceAFIS;
-
 namespace CrepeBiometricBridge;
 
 internal sealed class BridgeForm : Form
@@ -9,7 +7,8 @@ internal sealed class BridgeForm : Form
     private static readonly Color Background = Color.FromArgb(244, 247, 252);
     private static readonly Color Success = Color.FromArgb(18, 145, 102);
     private static readonly Color Danger = Color.FromArgb(202, 68, 80);
-    private readonly ComboBox employeeSearch = new() { DropDownStyle = ComboBoxStyle.DropDown, Font = new Font("Segoe UI", 13), Height = 44, IntegralHeight = false, Width = 440 };
+    private readonly TextBox employeeSearch = new() { Font = new Font("Segoe UI", 12), Width = 440 };
+    private readonly ListBox employeeList = new() { BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 11), IntegralHeight = false };
     private readonly Label selectedEmployee = new() { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), MaximumSize = new Size(440, 0), Text = "Busca y selecciona al colaborador para registrar su huella." };
     private readonly Button enroll = CreateButton("Registrar huella", Indigo);
     private readonly Button settings = CreateButton("Configuración", Color.FromArgb(225, 231, 241), Navy);
@@ -24,14 +23,15 @@ internal sealed class BridgeForm : Form
     private Task? kioskTask;
     private bool isUpdatingEmployees;
     private EmployeeOption? selectedEmployeeOption;
-    private CancellationTokenSource? enrollmentCancellation;
+    private EmployeeOption? pendingEnrollment;
+    private IReadOnlyDictionary<int, EmployeeOption> employeesById = new Dictionary<int, EmployeeOption>();
 
     public BridgeForm()
     {
         Text = "Crepe · Checador biométrico";
         BackColor = Background;
-        ClientSize = new Size(1000, 650);
-        MinimumSize = new Size(900, 590);
+        ClientSize = new Size(1000, 700);
+        MinimumSize = new Size(900, 620);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 11);
         cancelEnrollment.Visible = false;
@@ -49,10 +49,10 @@ internal sealed class BridgeForm : Form
         root.Controls.Add(CreateStatusCard(), 0, 1);
         Controls.Add(root);
 
-        employeeSearch.TextUpdate += async (_, _) => await BeginEmployeeSearchAsync();
-        employeeSearch.SelectedIndexChanged += async (_, _) => await UpdateSelectedEmployeeAsync();
-        enroll.Click += async (_, _) => await EnrollAsync();
-        cancelEnrollment.Click += (_, _) => enrollmentCancellation?.Cancel();
+        employeeSearch.TextChanged += async (_, _) => await BeginEmployeeSearchAsync();
+        employeeList.SelectedIndexChanged += (_, _) => UpdateSelectedEmployee();
+        enroll.Click += (_, _) => ArmEnrollment();
+        cancelEnrollment.Click += (_, _) => CancelEnrollment();
         settings.Click += (_, _) => EditSettings();
         Shown += async (_, _) =>
         {
@@ -70,23 +70,25 @@ internal sealed class BridgeForm : Form
     {
         var card = CreateCard();
         card.Margin = new Padding(0, 0, 12, 0);
-        var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(38), RowCount = 8 };
+        var layout = new TableLayoutPanel { ColumnCount = 1, Dock = DockStyle.Fill, Padding = new Padding(30), RowCount = 9 };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         layout.Controls.Add(new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 21), ForeColor = Navy, Text = "Registrar colaborador" }, 0, 0);
-        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), Text = "Escribe el nombre y selecciona a la persona de Crepe." }, 0, 1);
+        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(83, 95, 114), Text = "Busca o toca un nombre para registrar su huella." }, 0, 1);
         layout.Controls.Add(employeeSearch, 0, 2);
-        layout.Controls.Add(selectedEmployee, 0, 3);
-        layout.Controls.Add(enroll, 0, 4);
-        layout.Controls.Add(settings, 0, 5);
+        layout.Controls.Add(employeeList, 0, 3);
+        layout.Controls.Add(selectedEmployee, 0, 4);
+        layout.Controls.Add(enroll, 0, 5);
         layout.Controls.Add(cancelEnrollment, 0, 6);
-        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(106, 117, 136), MaximumSize = new Size(440, 0), Text = "El registro toma una lectura. Coloca un dedo firme y centrado sobre el lector." }, 0, 7);
+        layout.Controls.Add(settings, 0, 7);
+        layout.Controls.Add(new Label { AutoSize = true, ForeColor = Color.FromArgb(106, 117, 136), MaximumSize = new Size(440, 0), Text = "El lector permanece listo: al registrar, la siguiente huella se asigna al nombre seleccionado." }, 0, 8);
         card.Controls.Add(layout);
         return card;
     }
@@ -123,8 +125,6 @@ internal sealed class BridgeForm : Form
 
     private async Task BeginEmployeeSearchAsync()
     {
-        selectedEmployeeOption = null;
-        selectedEmployee.Text = "Busca y selecciona al colaborador para registrar su huella.";
         await QueueEmployeeSearchAsync();
     }
 
@@ -149,15 +149,12 @@ internal sealed class BridgeForm : Form
                 return;
             }
 
-            var currentText = employeeSearch.Text;
             isUpdatingEmployees = true;
-            employeeSearch.BeginUpdate();
-            employeeSearch.Items.Clear();
-            employeeSearch.Items.AddRange(employees.Cast<object>().ToArray());
-            employeeSearch.Text = currentText;
-            employeeSearch.SelectionStart = currentText.Length;
-            employeeSearch.EndUpdate();
-            employeeSearch.DroppedDown = employeeSearch.Focused && employees.Count > 0;
+            employeeList.BeginUpdate();
+            employeeList.Items.Clear();
+            employeeList.Items.AddRange(employees.Cast<object>().ToArray());
+            employeeList.EndUpdate();
+            employeesById = employees.ToDictionary(employee => employee.Id);
         }
         catch (OperationCanceledException)
         {
@@ -172,20 +169,19 @@ internal sealed class BridgeForm : Form
         }
     }
 
-    private async Task UpdateSelectedEmployeeAsync()
+    private void UpdateSelectedEmployee()
     {
-        if (isUpdatingEmployees || employeeSearch.SelectedItem is not EmployeeOption employee)
+        if (isUpdatingEmployees || employeeList.SelectedItem is not EmployeeOption employee)
         {
             return;
         }
 
         selectedEmployeeOption = employee;
         selectedEmployee.Text = $"Seleccionado: {employee.Name}{(string.IsNullOrWhiteSpace(employee.Position) ? string.Empty : $" · {employee.Position}")}";
-        await StopKioskAsync();
-        SetStatus("Listo para registrar", "Pulsa Registrar huella; el lector quedó reservado para este colaborador.", Indigo);
+        SetStatus("Listo para registrar", $"Pulsa Registrar huella para preparar a {employee.Name}.", Indigo);
     }
 
-    private async Task EnrollAsync()
+    private void ArmEnrollment()
     {
         if (selectedEmployeeOption is not { } employee)
         {
@@ -193,61 +189,20 @@ internal sealed class BridgeForm : Form
             return;
         }
 
-        await StopKioskAsync();
-        SetButtonsEnabled(false);
-        enrollmentCancellation = new CancellationTokenSource();
+        pendingEnrollment = employee;
         cancelEnrollment.Visible = true;
-
-        try
-        {
-            SetStatus("Registrar huella", "Coloca el dedo una vez. Se cancelará si no hay lectura en 15 segundos.", Indigo);
-            var capture = await CaptureForEnrollmentAsync(enrollmentCancellation.Token);
-            ShowPreview(capture.Preview);
-            var templateId = Guid.NewGuid();
-            vault.Save(templateId, employee.Id, [capture.Template]);
-
-            try
-            {
-                var message = await new CrepeClient(BridgeSettingsStore.Read()).EnrollAsync(employee.Id, templateId);
-                SetStatus("Huella registrada", $"{employee.Name}. {message}", Success);
-            }
-            catch
-            {
-                vault.Delete(templateId);
-                throw;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            SetStatus("Registro cancelado", "El lector volvió al modo automático.", Indigo);
-        }
-        catch (Exception exception)
-        {
-            SetStatus("No se pudo registrar la huella", exception.Message, Danger);
-        }
-        finally
-        {
-            enrollmentCancellation?.Dispose();
-            enrollmentCancellation = null;
-            cancelEnrollment.Visible = false;
-            SetButtonsEnabled(true);
-            StartKiosk();
-        }
+        enroll.Enabled = false;
+        employeeList.Enabled = false;
+        employeeSearch.Enabled = false;
+        SetStatus("Esperando huella", $"{employee.Name}: coloca el dedo. El lector ya está activo.", Indigo);
     }
 
-    private static async Task<CapturedFingerprint> CaptureForEnrollmentAsync(CancellationToken cancellationToken)
+    private void CancelEnrollment()
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        using var combined = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
-
-        try
-        {
-            return await FingerprintCapture.CaptureAsync(combined.Token);
-        }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-        {
-            throw new InvalidOperationException("No se detectó una huella en 15 segundos. Intenta de nuevo con el dedo centrado.");
-        }
+        pendingEnrollment = null;
+        cancelEnrollment.Visible = false;
+        SetButtonsEnabled(true);
+        SetStatus("Lector activo", "Registro cancelado. Coloca un dedo para registrar entrada o salida.", Indigo);
     }
 
     private void StartKiosk()
@@ -283,23 +238,41 @@ internal sealed class BridgeForm : Form
     {
         while (!cancellationToken.IsCancellationRequested)
         {
+            var currentEmployeeName = "Colaborador";
+
             try
             {
-                SetStatus("Lector activo", "Coloca un dedo para registrar entrada o salida.", Indigo);
+                if (pendingEnrollment is { } employee)
+                {
+                    SetStatus("Esperando huella", $"{employee.Name}: coloca el dedo. El lector ya está activo.", Indigo);
+                }
+                else
+                {
+                    SetStatus("Lector activo", "Coloca un dedo para registrar entrada o salida.", Indigo);
+                }
+
                 var capture = await FingerprintCapture.CaptureAsync(cancellationToken);
                 ShowPreview(capture.Preview);
+
+                if (pendingEnrollment is { } employeeToEnroll)
+                {
+                    await CompleteEnrollmentAsync(employeeToEnroll, capture);
+                    continue;
+                }
+
                 var match = vault.Find(capture.Template);
                 if (match is null || !match.IsRecognized)
                 {
                     SetStatus("Huella no reconocida", "Pide a recepción que registre la huella del colaborador.", Danger);
-                    await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                    await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
                     continue;
                 }
 
+                currentEmployeeName = EmployeeNameFor(match.Template);
                 var record = await new CrepeClient(BridgeSettingsStore.Read()).RegisterAsync(match.Template.TemplateId);
                 var checkLabel = record.Status == "checked_in" ? "Entrada registrada" : "Salida registrada";
                 SetStatus(checkLabel, $"{record.EmployeeName} · {record.CheckedAt}", Success);
-                await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -307,15 +280,49 @@ internal sealed class BridgeForm : Form
             }
             catch (CrepeBridgeException exception) when (exception.StatusCode == 422)
             {
-                SetStatus("Checada completada", exception.Message, Color.FromArgb(190, 126, 24));
-                await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
+                SetStatus("Checada ya completada", $"{currentEmployeeName} · {exception.Message}", Color.FromArgb(190, 126, 24));
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
             }
             catch (Exception exception)
             {
                 SetStatus("No se pudo leer la huella", exception.Message, Danger);
-                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
             }
         }
+    }
+
+    private async Task CompleteEnrollmentAsync(EmployeeOption employee, CapturedFingerprint capture)
+    {
+        var templateId = Guid.NewGuid();
+
+        try
+        {
+            vault.Save(templateId, employee, [capture.Template]);
+            var message = await new CrepeClient(BridgeSettingsStore.Read()).EnrollAsync(employee.Id, templateId);
+            SetStatus("Huella registrada", $"{employee.Name} · {message}", Success);
+        }
+        catch (Exception exception)
+        {
+            vault.Delete(templateId);
+            SetStatus("No se pudo registrar la huella", $"{employee.Name} · {exception.Message}", Danger);
+        }
+        finally
+        {
+            if (pendingEnrollment?.Id == employee.Id)
+            {
+                pendingEnrollment = null;
+            }
+
+            cancelEnrollment.Visible = false;
+            SetButtonsEnabled(true);
+        }
+    }
+
+    private string EmployeeNameFor(StoredTemplate template)
+    {
+        return template.EmployeeName
+            ?? employeesById.GetValueOrDefault(template.EmployeeId)?.Name
+            ?? $"Colaborador #{template.EmployeeId}";
     }
 
     private void ShowPreview(Bitmap preview)
@@ -341,6 +348,7 @@ internal sealed class BridgeForm : Form
         enroll.Enabled = enabled;
         settings.Enabled = enabled;
         employeeSearch.Enabled = enabled;
+        employeeList.Enabled = enabled;
     }
 
     private void SetStatus(string title, string detail, Color color)
